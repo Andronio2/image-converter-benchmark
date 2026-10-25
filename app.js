@@ -6,12 +6,21 @@ const progress = document.getElementById('progress');
 const fileResults = document.getElementById('fileResults');
 const againButton = document.getElementById('againButton');
 
+const resizeEnabled = document.getElementById('resizeEnabled');
+const noResizeEnabled = document.getElementById('noResizeEnabled');
+
 const successCount = document.getElementById('successCount');
 const originalSize = document.getElementById('originalSize');
-const convertedSize = document.getElementById('convertedSize');
-const webpSize = document.getElementById('webpSize');
-const sizeReduction = document.getElementById('sizeReduction');
-const webpReduction = document.getElementById('webpReduction');
+
+const jpegResizeSize = document.getElementById('jpegResizeSize');
+const webpResizeSize = document.getElementById('webpResizeSize');
+const jpegOriginalSize = document.getElementById('jpegOriginalSize');
+const webpOriginalSize = document.getElementById('webpOriginalSize');
+
+const jpegResizeReduction = document.getElementById('jpegResizeReduction');
+const webpResizeReduction = document.getElementById('webpResizeReduction');
+const jpegOriginalReduction = document.getElementById('jpegOriginalReduction');
+const webpOriginalReduction = document.getElementById('webpOriginalReduction');
 
 const TARGET_WIDTH = 1920;
 const TARGET_HEIGHT = 1080;
@@ -40,9 +49,30 @@ async function runBenchmark(files) {
         return;
     }
 
+    const modes = [];
+
+    if (resizeEnabled.checked) {
+        modes.push('resize');
+    }
+
+    if (noResizeEnabled.checked) {
+        modes.push('original');
+    }
+
+    if (!modes.length) {
+        alert('Выбери хотя бы один вариант обработки.');
+        return;
+    }
+
+    const order = document.querySelector(
+        'input[name="conversionOrder"]:checked'
+    ).value;
+
     isRunning = true;
     fileInput.disabled = true;
     againButton.disabled = true;
+    resizeEnabled.disabled = true;
+    noResizeEnabled.disabled = true;
 
     status.classList.remove('hidden');
     againButton.classList.add('hidden');
@@ -55,12 +85,13 @@ async function runBenchmark(files) {
 
     let processedCount = 0;
     let totalOriginalBytes = 0;
-    let totalJpegBytes = 0;
-    let totalWebpBytes = 0;
 
-    const order = document.querySelector(
-        'input[name="conversionOrder"]:checked'
-    ).value;
+    const totals = {
+        jpegResize: null,
+        webpResize: null,
+        jpegOriginal: null,
+        webpOriginal: null
+    };
 
     try {
         for (let i = 0; i < files.length; i++) {
@@ -77,46 +108,60 @@ async function runBenchmark(files) {
                 `Обрабатывается файл ${i + 1} из ${files.length}`;
 
             try {
-                const result = await convertImage(file, order);
+                const result = await convertImage(file, order, modes);
 
                 processedCount++;
                 totalOriginalBytes += file.size;
-                totalJpegBytes += result.jpegBlob.size;
-                totalWebpBytes += result.webpBlob.size;
 
+                for (const [key, item] of Object.entries(result)) {
+                    totals[key] = (totals[key] ?? 0) + item.blob.size;
+                }
 
-row.textContent =
-    `${file.name}\n` +
-    `Исходный размер: ${formatBytes(file.size)}\n\n` +
+                const lines = [
+                    file.name,
+                    `Исходный размер: ${formatBytes(file.size)}`
+                ];
 
-    `JPEG\n` +
-    `Загрузка и декодирование: ${formatTime(result.jpeg.decodeMs)}\n` +
-    `Ресайз: ${formatTime(result.jpeg.resizeMs)}\n` +
-    `Конвертация: ${formatTime(result.jpeg.encodeMs)}\n` +
-    `Общее время JPEG: ${formatTime(result.jpegTotalMs)}\n` +
-    `Размер: ${formatBytes(result.jpegBlob.size)}\n\n` +
+                const formatOrder = order === 'jpeg'
+                    ? ['jpeg', 'webp']
+                    : ['webp', 'jpeg'];
 
-    `WebP\n` +
-    `Загрузка и декодирование: ${formatTime(result.webp.decodeMs)}\n` +
-    `Ресайз: ${formatTime(result.webp.resizeMs)}\n` +
-    `Конвертация: ${formatTime(result.webp.encodeMs)}\n` +
-    `Общее время WebP: ${formatTime(result.webpTotalMs)}\n` +
-    `Размер: ${formatBytes(result.webpBlob.size)}`;
+                for (const format of formatOrder) {
+                    for (const mode of modes) {
+                        const key = `${format}${capitalize(mode)}`;
+                        const item = result[key];
+
+                        lines.push(
+                            '',
+                            `${format.toUpperCase()} — ${
+                                mode === 'resize'
+                                    ? 'с ресайзом'
+                                    : 'без ресайза'
+                            }`,
+                            `Разрешение: ${item.width}×${item.height}`,
+                            `Загрузка и декодирование: ${formatTime(item.decodeMs)}`,
+                            mode === 'resize'
+                                ? `Ресайз: ${formatTime(item.resizeMs)}`
+                                : 'Ресайз: не выполнялся',
+                            `Конвертация: ${formatTime(item.encodeMs)}`,
+                            `Общее время: ${formatTime(item.totalMs)}`,
+                            `Размер: ${formatBytes(item.blob.size)}`
+                        );
+                    }
+                }
+
+                row.textContent = lines.join('\n');
 
                 updateSummary({
                     processedCount,
                     totalOriginalBytes,
-                    totalJpegBytes,
-                    totalWebpBytes
+                    totals
                 });
             } catch (error) {
                 row.textContent =
                     `${file.name}\nОшибка: ${error.message}`;
 
-                console.error(
-                    `Ошибка обработки ${file.name}:`,
-                    error
-                );
+                console.error(`Ошибка обработки ${file.name}:`, error);
             }
         }
 
@@ -126,77 +171,61 @@ row.textContent =
         isRunning = false;
         fileInput.disabled = false;
         againButton.disabled = false;
+        resizeEnabled.disabled = false;
+        noResizeEnabled.disabled = false;
         againButton.classList.remove('hidden');
     }
 }
 
+async function convertImage(file, order, modes) {
+    const result = {};
 
-async function convertImage(file, order) {
-    let jpegResult;
-    let webpResult;
+    const formatOrder = order === 'jpeg'
+        ? ['jpeg', 'webp']
+        : ['webp', 'jpeg'];
 
-    if (order === 'jpeg') {
-        jpegResult = await processFormat(
-            file,
-            'image/jpeg',
-            QUALITY
-        );
+    const mimeTypes = {
+        jpeg: 'image/jpeg',
+        webp: 'image/webp'
+    };
 
-        webpResult = await processFormat(
-            file,
-            'image/webp',
-            QUALITY
-        );
-    } else {
-        webpResult = await processFormat(
-            file,
-            'image/webp',
-            QUALITY
-        );
+    for (const format of formatOrder) {
+        for (const mode of modes) {
+            const key = `${format}${capitalize(mode)}`;
 
-        jpegResult = await processFormat(
-            file,
-            'image/jpeg',
-            QUALITY
-        );
+            result[key] = await processFormat(
+                file,
+                mimeTypes[format],
+                QUALITY,
+                mode === 'resize'
+            );
+        }
     }
 
-    return {
-        jpeg: jpegResult,
-        webp: webpResult,
-        jpegBlob: jpegResult.blob,
-        webpBlob: webpResult.blob,
-        jpegTotalMs: jpegResult.decodeMs
-            + jpegResult.resizeMs
-            + jpegResult.encodeMs,
-        webpTotalMs: webpResult.decodeMs
-            + webpResult.resizeMs
-            + webpResult.encodeMs
-    };
+    return result;
 }
 
-async function processFormat(file, type, quality) {
-    // Загрузка и декодирование исходного файла
+async function processFormat(file, type, quality, shouldResize) {
+    const totalStart = performance.now();
+
+    // Загрузка и декодирование исходного изображения
     const decodeStart = performance.now();
     const image = await loadImage(file);
     const decodeMs = performance.now() - decodeStart;
 
-    // Вычисление размера результата
-    const scale = Math.min(
-        1,
-        TARGET_WIDTH / image.naturalWidth,
-        TARGET_HEIGHT / image.naturalHeight
-    );
+    let width = image.naturalWidth;
+    let height = image.naturalHeight;
 
-    const width = Math.max(
-        1,
-        Math.round(image.naturalWidth * scale)
-    );
+    if (shouldResize) {
+        const scale = Math.min(
+            1,
+            TARGET_WIDTH / width,
+            TARGET_HEIGHT / height
+        );
 
-    const height = Math.max(
-        1,
-        Math.round(image.naturalHeight * scale)
-    );
+        width = Math.max(1, Math.round(width * scale));
+        height = Math.max(1, Math.round(height * scale));
+    }
 
     const canvas = document.createElement('canvas');
     canvas.width = width;
@@ -205,36 +234,23 @@ async function processFormat(file, type, quality) {
     const context = canvas.getContext('2d');
 
     if (!context) {
-        throw new Error(
-            'Не удалось создать Canvas 2D-контекст'
-        );
+        throw new Error('Не удалось создать Canvas 2D-контекст');
     }
 
-    // Ресайз
+    // Рисование изображения на Canvas
     const resizeStart = performance.now();
 
-    context.drawImage(
-        image,
-        0,
-        0,
-        width,
-        height
-    );
+    context.drawImage(image, 0, 0, width, height);
 
     const resizeMs = performance.now() - resizeStart;
 
-    // Конвертация
+    // Кодирование в JPEG или WebP
     const encodeStart = performance.now();
-
-    const blob = await canvasToBlob(
-        canvas,
-        type,
-        quality
-    );
-
+    const blob = await canvasToBlob(canvas, type, quality);
     const encodeMs = performance.now() - encodeStart;
 
-    // Освобождение ресурсов canvas
+    const totalMs = performance.now() - totalStart;
+
     canvas.width = 0;
     canvas.height = 0;
 
@@ -242,6 +258,9 @@ async function processFormat(file, type, quality) {
         decodeMs,
         resizeMs,
         encodeMs,
+        totalMs,
+        width,
+        height,
         blob
     };
 }
@@ -258,9 +277,7 @@ function loadImage(file) {
 
         image.onerror = () => {
             URL.revokeObjectURL(url);
-            reject(
-                new Error('Не удалось загрузить изображение')
-            );
+            reject(new Error('Не удалось загрузить изображение'));
         };
 
         image.src = url;
@@ -269,65 +286,79 @@ function loadImage(file) {
 
 function canvasToBlob(canvas, type, quality) {
     return new Promise((resolve, reject) => {
-        canvas.toBlob(
-            blob => {
-                if (!blob) {
-                    reject(
-                        new Error(`Не удалось создать файл ${type}`)
-                    );
-                    return;
-                }
+        canvas.toBlob(blob => {
+            if (!blob) {
+                reject(new Error(`Не удалось создать файл ${type}`));
+                return;
+            }
 
-                if (blob.type !== type) {
-                    reject(
-                        new Error(
-                            `Браузер не поддерживает формат ${type}`
-                        )
-                    );
-                    return;
-                }
+            if (blob.type !== type) {
+                reject(
+                    new Error(`Браузер не создал файл в формате ${type}`)
+                );
+                return;
+            }
 
-                resolve(blob);
-            },
-            type,
-            quality
-        );
+            resolve(blob);
+        }, type, quality);
     });
 }
 
 function resetSummary() {
     successCount.textContent = '0';
     originalSize.textContent = '—';
-    convertedSize.textContent = '—';
-    webpSize.textContent = '—';
-    sizeReduction.textContent = '—';
-    webpReduction.textContent = '—';
+
+    jpegResizeSize.textContent = '—';
+    webpResizeSize.textContent = '—';
+    jpegOriginalSize.textContent = '—';
+    webpOriginalSize.textContent = '—';
+
+    jpegResizeReduction.textContent = '—';
+    webpResizeReduction.textContent = '—';
+    jpegOriginalReduction.textContent = '—';
+    webpOriginalReduction.textContent = '—';
 }
 
 function updateSummary({
     processedCount,
     totalOriginalBytes,
-    totalJpegBytes,
-    totalWebpBytes
+    totals
 }) {
     successCount.textContent = String(processedCount);
     originalSize.textContent = formatBytes(totalOriginalBytes);
-    convertedSize.textContent = formatBytes(totalJpegBytes);
-    webpSize.textContent = formatBytes(totalWebpBytes);
 
-    sizeReduction.textContent = calculateReduction(
+    jpegResizeSize.textContent = formatTotal(totals.jpegResize);
+    webpResizeSize.textContent = formatTotal(totals.webpResize);
+    jpegOriginalSize.textContent = formatTotal(totals.jpegOriginal);
+    webpOriginalSize.textContent = formatTotal(totals.webpOriginal);
+
+    jpegResizeReduction.textContent = calculateReduction(
         totalOriginalBytes,
-        totalJpegBytes
+        totals.jpegResize
     );
 
-    webpReduction.textContent = calculateReduction(
+    webpResizeReduction.textContent = calculateReduction(
         totalOriginalBytes,
-        totalWebpBytes
+        totals.webpResize
+    );
+
+    jpegOriginalReduction.textContent = calculateReduction(
+        totalOriginalBytes,
+        totals.jpegOriginal
+    );
+
+    webpOriginalReduction.textContent = calculateReduction(
+        totalOriginalBytes,
+        totals.webpOriginal
     );
 }
 
+function formatTotal(bytes) {
+    return bytes === null ? '—' : formatBytes(bytes);
+}
+
 function calculateReduction(originalBytes, convertedBytes) {
-    if (!originalBytes) {
+    if (!originalBytes || convertedBytes === null) {
         return '—';
     }
 
@@ -351,4 +382,8 @@ function formatBytes(bytes) {
     }
 
     return `${(bytes / (1024 * 1024)).toFixed(2)} МБ`;
+}
+
+function capitalize(value) {
+    return value.charAt(0).toUpperCase() + value.slice(1);
 }

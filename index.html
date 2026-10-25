@@ -13,6 +13,7 @@
             overflow-wrap: anywhere;
             text-align: left;
             line-height: 1.6;
+            margin-top: 16px;
         }
 
         .summary {
@@ -25,7 +26,8 @@
             overflow-wrap: anywhere;
         }
 
-        .order-options {
+        .order-options,
+        .resize-options {
             margin: 20px 0;
             display: flex;
             gap: 20px;
@@ -33,11 +35,16 @@
             justify-content: center;
         }
 
-        .order-options label {
+        .order-options label,
+        .resize-options label {
             display: flex;
             align-items: center;
             gap: 8px;
             cursor: pointer;
+        }
+
+        .options-title {
+            margin: 20px 0 8px;
         }
     </style>
 </head>
@@ -47,9 +54,12 @@
         <h1>Image Converter Benchmark</h1>
 
         <p class="description">
-            Сравнение JPEG и WebP. Изображения уменьшаются до
-            1920×1080 без увеличения маленьких изображений.
+            Сравнение JPEG и WebP с ресайзом и без ресайза.
+            Максимальный размер при ресайзе — 1920×1080.
+            Маленькие изображения не увеличиваются.
         </p>
+
+        <h3 class="options-title">Порядок конвертации</h3>
 
         <div class="order-options">
             <label>
@@ -69,6 +79,20 @@
                     value="webp"
                 >
                 Сначала WebP
+            </label>
+        </div>
+
+        <h3 class="options-title">Варианты обработки</h3>
+
+        <div class="resize-options">
+            <label>
+                <input id="resizeEnabled" type="checkbox" checked>
+                Ресайз
+            </label>
+
+            <label>
+                <input id="noResizeEnabled" type="checkbox" checked>
+                Без ресайза
             </label>
         </div>
 
@@ -103,33 +127,53 @@
                 <h3>Общая статистика</h3>
 
                 <div>
-                    Успешно обработано:
+                    Успешно обработано файлов:
                     <strong id="successCount">0</strong>
                 </div>
 
                 <div>
-                    Исходный размер:
+                    Суммарный исходный размер:
                     <strong id="originalSize">—</strong>
                 </div>
 
                 <div>
-                    Суммарный размер JPEG:
-                    <strong id="convertedSize">—</strong>
+                    JPEG с ресайзом:
+                    <strong id="jpegResizeSize">—</strong>
                 </div>
 
                 <div>
-                    Суммарный размер WebP:
-                    <strong id="webpSize">—</strong>
+                    WebP с ресайзом:
+                    <strong id="webpResizeSize">—</strong>
                 </div>
 
                 <div>
-                    Экономия места с JPEG:
-                    <strong id="sizeReduction">—</strong>
+                    JPEG без ресайза:
+                    <strong id="jpegOriginalSize">—</strong>
                 </div>
 
                 <div>
-                    Экономия места с WebP:
-                    <strong id="webpReduction">—</strong>
+                    WebP без ресайза:
+                    <strong id="webpOriginalSize">—</strong>
+                </div>
+
+                <div>
+                    Экономия JPEG с ресайзом:
+                    <strong id="jpegResizeReduction">—</strong>
+                </div>
+
+                <div>
+                    Экономия WebP с ресайзом:
+                    <strong id="webpResizeReduction">—</strong>
+                </div>
+
+                <div>
+                    Экономия JPEG без ресайза:
+                    <strong id="jpegOriginalReduction">—</strong>
+                </div>
+
+                <div>
+                    Экономия WebP без ресайза:
+                    <strong id="webpOriginalReduction">—</strong>
                 </div>
             </div>
         </section>
