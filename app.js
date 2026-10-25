@@ -10,6 +10,10 @@ const originalSize = document.getElementById('originalSize');
 const convertedSize = document.getElementById('convertedSize');
 const sizeReduction = document.getElementById('sizeReduction');
 const againButton = document.getElementById('againButton');
+const decodeTime = document.getElementById('decodeTime');
+const jpegTime = document.getElementById('jpegTime');
+const webpTime = document.getElementById('webpTime');
+const webpSize = document.getElementById('webpSize');
 
 const TARGET_WIDTH = 1920;
 const TARGET_HEIGHT = 1080;
@@ -30,10 +34,18 @@ fileInput.addEventListener('change', async () => {
   successCount.textContent = '0';
   originalSize.textContent = '—';
   convertedSize.textContent = '—';
-  sizeReduction.textContent = '—';
+
+  decodeTime.textContent = '—';
+  jpegTime.textContent = '—';
+  webpTime.textContent = '—';
+  webpSize.textContent = '—';
 
   const startTime = performance.now();
   let processedCount = 0;
+  let totalWebpBytes = 0;
+  let totalDecodeMs = 0;
+  let totalJpegMs = 0;
+  let totalWebpMs = 0;
   let totalOriginalBytes = 0;
   let totalConvertedBytes = 0;
 
@@ -48,27 +60,31 @@ fileInput.addEventListener('change', async () => {
     fileResults.appendChild(row);
 
     try {
-      const itemStart = performance.now();
-      const blob = await convertImage(file);
-      updateMemoryUsage();
-      const itemTime = performance.now() - itemStart;
+      const result = await convertImage(file);
 
       processedCount++;
       totalOriginalBytes += file.size;
-      totalConvertedBytes += blob.size;
+      totalConvertedBytes += result.jpegBlob.size;
+      totalWebpBytes += result.webpBlob.size;
+
+      totalDecodeMs += result.decodeMs;
+      totalJpegMs += result.jpegMs;
+      totalWebpMs += result.webpMs;
 
       successCount.textContent = processedCount;
       originalSize.textContent = formatBytes(totalOriginalBytes);
       convertedSize.textContent = formatBytes(totalConvertedBytes);
+      webpSize.textContent = formatBytes(totalWebpBytes);
 
-      if (totalOriginalBytes > 0) {
-        const reduction = (1 - totalConvertedBytes / totalOriginalBytes) * 100;
-
-        sizeReduction.textContent = `${reduction.toFixed(1)}%`;
-      }
+      decodeTime.textContent = `${totalDecodeMs.toFixed(1)} мс`;
+      jpegTime.textContent = `${totalJpegMs.toFixed(1)} мс`;
+      webpTime.textContent = `${totalWebpMs.toFixed(1)} мс`;
 
       row.textContent =
-        `${file.name} — ${formatBytes(file.size)} → ` + `${formatBytes(blob.size)} JPEG — ${itemTime.toFixed(1)} мс`;
+        `${file.name} — ` +
+        `декодирование: ${result.decodeMs.toFixed(1)} мс; ` +
+        `JPEG: ${result.jpegMs.toFixed(1)} мс, ${formatBytes(result.jpegBlob.size)}; ` +
+        `WebP: ${result.webpMs.toFixed(1)} мс, ${formatBytes(result.webpBlob.size)}`;
     } catch (error) {
       console.error(error);
       row.textContent = `${file.name} — ошибка: ${error.message}`;
@@ -94,12 +110,16 @@ function formatBytes(bytes) {
 }
 
 async function convertImage(file) {
+  // 1. Декодирование исходного изображения
+  const decodeStart = performance.now();
   const image = await loadImage(file);
+  const decodeMs = performance.now() - decodeStart;
 
-  const scale = Math.min(1, 1920 / image.naturalWidth, 1080 / image.naturalHeight);
+  // Подготовка изображения с сохранением пропорций
+  const scale = Math.min(1, TARGET_WIDTH / image.naturalWidth, TARGET_HEIGHT / image.naturalHeight);
 
-  const width = Math.round(image.naturalWidth * scale);
-  const height = Math.round(image.naturalHeight * scale);
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -108,17 +128,42 @@ async function convertImage(file) {
   const context = canvas.getContext('2d');
   context.drawImage(image, 0, 0, width, height);
 
-  return await new Promise((resolve, reject) => {
+  // 2. Кодирование в JPEG
+  // Прогрев обоих кодировщиков — результаты не используем
+  await canvasToBlob(canvas, 'image/webp', 0.9);
+  await canvasToBlob(canvas, 'image/jpeg', 0.9);
+
+  // Измеряем WebP
+  const webpStart = performance.now();
+  const webpBlob = await canvasToBlob(canvas, 'image/webp', 0.9);
+  const webpMs = performance.now() - webpStart;
+
+  // Измеряем JPEG
+  const jpegStart = performance.now();
+  const jpegBlob = await canvasToBlob(canvas, 'image/jpeg', 0.9);
+  const jpegMs = performance.now() - jpegStart;
+
+  return {
+    decodeMs,
+    jpegMs,
+    webpMs,
+    jpegBlob,
+    webpBlob,
+  };
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
         if (blob) {
           resolve(blob);
         } else {
-          reject(new Error('Не удалось создать JPEG'));
+          reject(new Error(`Не удалось создать файл ${type}`));
         }
       },
-      'image/jpeg',
-      0.9,
+      type,
+      quality,
     );
   });
 }
