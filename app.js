@@ -1,237 +1,354 @@
+
 const fileInput = document.getElementById('fileInput');
 const status = document.getElementById('status');
 const fileCount = document.getElementById('fileCount');
 const progress = document.getElementById('progress');
-const elapsedTime = document.getElementById('elapsedTime');
-const averageTime = document.getElementById('averageTime');
 const fileResults = document.getElementById('fileResults');
+const againButton = document.getElementById('againButton');
+
 const successCount = document.getElementById('successCount');
 const originalSize = document.getElementById('originalSize');
 const convertedSize = document.getElementById('convertedSize');
-const sizeReduction = document.getElementById('sizeReduction');
-const againButton = document.getElementById('againButton');
-const decodeTime = document.getElementById('decodeTime');
-const jpegTime = document.getElementById('jpegTime');
-const webpTime = document.getElementById('webpTime');
 const webpSize = document.getElementById('webpSize');
+const sizeReduction = document.getElementById('sizeReduction');
+const webpReduction = document.getElementById('webpReduction');
 
 const TARGET_WIDTH = 1920;
 const TARGET_HEIGHT = 1080;
+const QUALITY = 0.9;
+
+let isRunning = false;
 
 fileInput.addEventListener('change', async () => {
-  const files = Array.from(fileInput.files);
+    const files = Array.from(fileInput.files);
 
-  if (!files.length) {
-    return;
-  }
-
-  status.classList.remove('hidden');
-  fileCount.textContent = files.length;
-  progress.textContent = 'Начинаем обработку...';
-  elapsedTime.textContent = '—';
-  averageTime.textContent = '—';
-  fileResults.replaceChildren();
-  successCount.textContent = '0';
-  originalSize.textContent = '—';
-  convertedSize.textContent = '—';
-
-  decodeTime.textContent = '—';
-  jpegTime.textContent = '—';
-  webpTime.textContent = '—';
-  webpSize.textContent = '—';
-
-  const startTime = performance.now();
-  let processedCount = 0;
-  let totalWebpBytes = 0;
-  let totalDecodeMs = 0;
-  let totalJpegMs = 0;
-  let totalWebpMs = 0;
-  let totalOriginalBytes = 0;
-  let totalConvertedBytes = 0;
-
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-
-    progress.textContent = `Обработка: ${i + 1} / ${files.length}`;
-
-    const row = document.createElement('div');
-    row.className = 'file-result';
-    row.textContent = `${file.name} — обработка...`;
-    fileResults.appendChild(row);
-
-    try {
-      const result = await convertImage(file);
-
-      processedCount++;
-      totalOriginalBytes += file.size;
-      totalConvertedBytes += result.jpegBlob.size;
-      totalWebpBytes += result.webpBlob.size;
-
-      totalDecodeMs += result.decodeMs;
-      totalJpegMs += result.jpegMs;
-      totalWebpMs += result.webpMs;
-
-      successCount.textContent = processedCount;
-      originalSize.textContent = formatBytes(totalOriginalBytes);
-      convertedSize.textContent = formatBytes(totalConvertedBytes);
-      webpSize.textContent = formatBytes(totalWebpBytes);
-
-      decodeTime.textContent = `${totalDecodeMs.toFixed(1)} мс`;
-      jpegTime.textContent = `${totalJpegMs.toFixed(1)} мс`;
-      webpTime.textContent = `${totalWebpMs.toFixed(1)} мс`;
-
-      row.textContent =
-        `${file.name} — ` +
-        `декодирование: ${result.decodeMs.toFixed(1)} мс; ` +
-        `JPEG: ${result.jpegMs.toFixed(1)} мс, ${formatBytes(result.jpegBlob.size)}; ` +
-        `WebP: ${result.webpMs.toFixed(1)} мс, ${formatBytes(result.webpBlob.size)}`;
-    } catch (error) {
-      console.error(error);
-      row.textContent = `${file.name} — ошибка: ${error.message}`;
+    if (files.length) {
+        await runBenchmark(files);
     }
-  }
-
-  const totalTime = performance.now() - startTime;
-  updateMemoryUsage();
-
-  elapsedTime.textContent = `${(totalTime / 1000).toFixed(3)} сек`;
-  averageTime.textContent = processedCount ? `${(totalTime / processedCount).toFixed(1)} мс / изображение` : '—';
-
-  progress.textContent = `Завершено: ${processedCount} из ${files.length}`;
-  againButton.classList.remove('hidden');
 });
 
-function formatBytes(bytes) {
-  if (bytes < 1024) {
-    return `${bytes} Б`;
-  }
+againButton.addEventListener('click', async () => {
+    const files = Array.from(fileInput.files);
 
-  return `${(bytes / 1024 / 1024).toFixed(2)} МБ`;
-}
+    if (files.length) {
+        await runBenchmark(files);
+    }
+});
 
-async function convertImage(file) {
-  // 1. Декодирование исходного изображения
-  const decodeStart = performance.now();
-  const image = await loadImage(file);
-  const decodeMs = performance.now() - decodeStart;
+async function runBenchmark(files) {
+    if (isRunning || !files.length) {
+        return;
+    }
 
-  // Подготовка изображения с сохранением пропорций
-  const scale = Math.min(1, TARGET_WIDTH / image.naturalWidth, TARGET_HEIGHT / image.naturalHeight);
+    isRunning = true;
+    fileInput.disabled = true;
+    againButton.disabled = true;
 
-  const width = Math.max(1, Math.round(image.naturalWidth * scale));
-  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    status.classList.remove('hidden');
+    againButton.classList.add('hidden');
 
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+    fileCount.textContent = String(files.length);
+    progress.textContent = 'Начинаем обработку...';
+    fileResults.replaceChildren();
 
-  const context = canvas.getContext('2d');
-  context.drawImage(image, 0, 0, width, height);
+    resetSummary();
 
-  // 2. Кодирование в JPEG
-  // Прогрев обоих кодировщиков — результаты не используем
-  await canvasToBlob(canvas, 'image/webp', 0.9);
-  await canvasToBlob(canvas, 'image/jpeg', 0.9);
+    let processedCount = 0;
+    let totalOriginalBytes = 0;
+    let totalJpegBytes = 0;
+    let totalWebpBytes = 0;
 
-  // Измеряем WebP
-  const webpStart = performance.now();
-  const webpBlob = await canvasToBlob(canvas, 'image/webp', 0.9);
-  const webpMs = performance.now() - webpStart;
+    const order = document.querySelector(
+        'input[name="conversionOrder"]:checked'
+    ).value;
 
-  // Измеряем JPEG
-  const jpegStart = performance.now();
-  const jpegBlob = await canvasToBlob(canvas, 'image/jpeg', 0.9);
-  const jpegMs = performance.now() - jpegStart;
+    try {
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
 
-  return {
-    decodeMs,
-    jpegMs,
-    webpMs,
-    jpegBlob,
-    webpBlob,
-  };
-}
+            const row = document.createElement('div');
+            row.className = 'file-result';
+            row.textContent =
+                `${file.name}\nОбработка ${i + 1} из ${files.length}...`;
 
-function canvasToBlob(canvas, type, quality) {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          resolve(blob);
-        } else {
-          reject(new Error(`Не удалось создать файл ${type}`));
+            fileResults.appendChild(row);
+
+            progress.textContent =
+                `Обрабатывается файл ${i + 1} из ${files.length}`;
+
+            try {
+                const result = await convertImage(file, order);
+
+                processedCount++;
+                totalOriginalBytes += file.size;
+                totalJpegBytes += result.jpegBlob.size;
+                totalWebpBytes += result.webpBlob.size;
+
+
+row.textContent =
+    `${file.name}\n` +
+    `Исходный размер: ${formatBytes(file.size)}\n\n` +
+
+    `JPEG\n` +
+    `Загрузка и декодирование: ${formatTime(result.jpeg.decodeMs)}\n` +
+    `Ресайз: ${formatTime(result.jpeg.resizeMs)}\n` +
+    `Конвертация: ${formatTime(result.jpeg.encodeMs)}\n` +
+    `Общее время JPEG: ${formatTime(result.jpegTotalMs)}\n` +
+    `Размер: ${formatBytes(result.jpegBlob.size)}\n\n` +
+
+    `WebP\n` +
+    `Загрузка и декодирование: ${formatTime(result.webp.decodeMs)}\n` +
+    `Ресайз: ${formatTime(result.webp.resizeMs)}\n` +
+    `Конвертация: ${formatTime(result.webp.encodeMs)}\n` +
+    `Общее время WebP: ${formatTime(result.webpTotalMs)}\n` +
+    `Размер: ${formatBytes(result.webpBlob.size)}`;
+
+                updateSummary({
+                    processedCount,
+                    totalOriginalBytes,
+                    totalJpegBytes,
+                    totalWebpBytes
+                });
+            } catch (error) {
+                row.textContent =
+                    `${file.name}\nОшибка: ${error.message}`;
+
+                console.error(
+                    `Ошибка обработки ${file.name}:`,
+                    error
+                );
+            }
         }
-      },
-      type,
-      quality,
+
+        progress.textContent =
+            `Завершено: ${processedCount} из ${files.length}`;
+    } finally {
+        isRunning = false;
+        fileInput.disabled = false;
+        againButton.disabled = false;
+        againButton.classList.remove('hidden');
+    }
+}
+
+
+async function convertImage(file, order) {
+    let jpegResult;
+    let webpResult;
+
+    if (order === 'jpeg') {
+        jpegResult = await processFormat(
+            file,
+            'image/jpeg',
+            QUALITY
+        );
+
+        webpResult = await processFormat(
+            file,
+            'image/webp',
+            QUALITY
+        );
+    } else {
+        webpResult = await processFormat(
+            file,
+            'image/webp',
+            QUALITY
+        );
+
+        jpegResult = await processFormat(
+            file,
+            'image/jpeg',
+            QUALITY
+        );
+    }
+
+    return {
+        jpeg: jpegResult,
+        webp: webpResult,
+        jpegBlob: jpegResult.blob,
+        webpBlob: webpResult.blob,
+        jpegTotalMs: jpegResult.decodeMs
+            + jpegResult.resizeMs
+            + jpegResult.encodeMs,
+        webpTotalMs: webpResult.decodeMs
+            + webpResult.resizeMs
+            + webpResult.encodeMs
+    };
+}
+
+async function processFormat(file, type, quality) {
+    // Загрузка и декодирование исходного файла
+    const decodeStart = performance.now();
+    const image = await loadImage(file);
+    const decodeMs = performance.now() - decodeStart;
+
+    // Вычисление размера результата
+    const scale = Math.min(
+        1,
+        TARGET_WIDTH / image.naturalWidth,
+        TARGET_HEIGHT / image.naturalHeight
     );
-  });
+
+    const width = Math.max(
+        1,
+        Math.round(image.naturalWidth * scale)
+    );
+
+    const height = Math.max(
+        1,
+        Math.round(image.naturalHeight * scale)
+    );
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+        throw new Error(
+            'Не удалось создать Canvas 2D-контекст'
+        );
+    }
+
+    // Ресайз
+    const resizeStart = performance.now();
+
+    context.drawImage(
+        image,
+        0,
+        0,
+        width,
+        height
+    );
+
+    const resizeMs = performance.now() - resizeStart;
+
+    // Конвертация
+    const encodeStart = performance.now();
+
+    const blob = await canvasToBlob(
+        canvas,
+        type,
+        quality
+    );
+
+    const encodeMs = performance.now() - encodeStart;
+
+    // Освобождение ресурсов canvas
+    canvas.width = 0;
+    canvas.height = 0;
+
+    return {
+        decodeMs,
+        resizeMs,
+        encodeMs,
+        blob
+    };
 }
 
 function loadImage(file) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const image = new Image();
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const image = new Image();
 
-    image.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(image);
-    };
+        image.onload = () => {
+            URL.revokeObjectURL(url);
+            resolve(image);
+        };
 
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error(`Не удалось загрузить ${file.name}`));
-    };
+        image.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(
+                new Error('Не удалось загрузить изображение')
+            );
+        };
 
-    image.src = url;
-  });
+        image.src = url;
+    });
 }
 
-async function updateDeviceInfo() {
-  const memoryUsage = document.getElementById('memoryUsage');
-  const batteryLevel = document.getElementById('batteryLevel');
+function canvasToBlob(canvas, type, quality) {
+    return new Promise((resolve, reject) => {
+        canvas.toBlob(
+            blob => {
+                if (!blob) {
+                    reject(
+                        new Error(`Не удалось создать файл ${type}`)
+                    );
+                    return;
+                }
 
-  // Использование памяти JavaScript (если браузер поддерживает API)
-  if (performance.memory) {
-    const usedMB = performance.memory.usedJSHeapSize / 1024 / 1024;
-    const limitMB = performance.memory.jsHeapSizeLimit / 1024 / 1024;
+                if (blob.type !== type) {
+                    reject(
+                        new Error(
+                            `Браузер не поддерживает формат ${type}`
+                        )
+                    );
+                    return;
+                }
 
-    memoryUsage.textContent = `${usedMB.toFixed(1)} МБ из ${limitMB.toFixed(0)} МБ`;
-  } else {
-    memoryUsage.textContent = 'Недоступно';
-  }
+                resolve(blob);
+            },
+            type,
+            quality
+        );
+    });
+}
 
-  // Уровень заряда батареи (если браузер поддерживает API)
-  if ('getBattery' in navigator) {
-    try {
-      const battery = await navigator.getBattery();
-      const level = Math.round(battery.level * 100);
-      const charging = battery.charging ? 'идёт зарядка' : 'не заряжается';
+function resetSummary() {
+    successCount.textContent = '0';
+    originalSize.textContent = '—';
+    convertedSize.textContent = '—';
+    webpSize.textContent = '—';
+    sizeReduction.textContent = '—';
+    webpReduction.textContent = '—';
+}
 
-      batteryLevel.textContent = `${level}% (${charging})`;
-    } catch {
-      batteryLevel.textContent = 'Недоступно';
+function updateSummary({
+    processedCount,
+    totalOriginalBytes,
+    totalJpegBytes,
+    totalWebpBytes
+}) {
+    successCount.textContent = String(processedCount);
+    originalSize.textContent = formatBytes(totalOriginalBytes);
+    convertedSize.textContent = formatBytes(totalJpegBytes);
+    webpSize.textContent = formatBytes(totalWebpBytes);
+
+    sizeReduction.textContent = calculateReduction(
+        totalOriginalBytes,
+        totalJpegBytes
+    );
+
+    webpReduction.textContent = calculateReduction(
+        totalOriginalBytes,
+        totalWebpBytes
+    );
+}
+
+function calculateReduction(originalBytes, convertedBytes) {
+    if (!originalBytes) {
+        return '—';
     }
-  } else {
-    batteryLevel.textContent = 'Недоступно';
-  }
+
+    const percentage =
+        (1 - convertedBytes / originalBytes) * 100;
+
+    return `${percentage.toFixed(1)}%`;
 }
 
-updateDeviceInfo();
-
-function updateMemoryUsage() {
-  const memoryUsage = document.getElementById('memoryUsage');
-
-  if (performance.memory) {
-    const usedMB = performance.memory.usedJSHeapSize / 1024 / 1024;
-    const limitMB = performance.memory.jsHeapSizeLimit / 1024 / 1024;
-
-    memoryUsage.textContent = `${usedMB.toFixed(1)} МБ из ${limitMB.toFixed(0)} МБ`;
-  } else {
-    memoryUsage.textContent = 'Недоступно';
-  }
+function formatTime(milliseconds) {
+    return `${milliseconds.toFixed(1)} мс`;
 }
 
-againButton.addEventListener('click', () => {
-  fileInput.dispatchEvent(new Event('change'));
-});
+function formatBytes(bytes) {
+    if (bytes < 1024) {
+        return `${bytes} Б`;
+    }
+
+    if (bytes < 1024 * 1024) {
+        return `${(bytes / 1024).toFixed(1)} КБ`;
+    }
+
+    return `${(bytes / (1024 * 1024)).toFixed(2)} МБ`;
+}

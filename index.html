@@ -1,48 +1,140 @@
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="ru">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Image Converter Benchmark</title>
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
+    <link rel="stylesheet" href="style.css">
+
+    <style>
+        .file-result {
+            white-space: pre-line;
+            overflow-wrap: anywhere;
+            text-align: left;
+            line-height: 1.6;
+        }
+
+        .summary {
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid #ddd;
+            display: grid;
+            gap: 10px;
+            text-align: left;
+            overflow-wrap: anywhere;
+        }
+
+        .order-options {
+            margin: 20px 0;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .order-options label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
     <main class="container">
-      <h1>Image Converter Benchmark</h1>
-      <p class="description">Выберите изображения для последовательного преобразования в JPEG 1920×1080.</p>
-      <label class="file-button">
-        Выбрать изображения <input id="fileInput" type="file" accept="image/*" multiple />
-      </label>
-      <button id="againButton" class="again-button hidden" type="button">Обработать снова</button>
-      <section id="status" class="status hidden">
-        <div>Выбрано файлов: <strong id="fileCount">0</strong></div>
-        <div id="progress"></div>
-        <div id="fileResults"></div>
-        <div class="result">
-          <div>Время обработки: <strong id="elapsedTime">—</strong></div>
-          <div>Среднее время: <strong id="averageTime">—</strong></div>
+        <h1>Image Converter Benchmark</h1>
+
+        <p class="description">
+            Сравнение JPEG и WebP. Изображения уменьшаются до
+            1920×1080 без увеличения маленьких изображений.
+        </p>
+
+        <div class="order-options">
+            <label>
+                <input
+                    type="radio"
+                    name="conversionOrder"
+                    value="jpeg"
+                    checked
+                >
+                Сначала JPEG
+            </label>
+
+            <label>
+                <input
+                    type="radio"
+                    name="conversionOrder"
+                    value="webp"
+                >
+                Сначала WebP
+            </label>
         </div>
 
-        <div class="summary">
-          <div>Успешно обработано: <strong id="successCount">0</strong></div>
-          <div>Исходный размер: <strong id="originalSize">—</strong></div>
+        <label class="file-button">
+            Выбрать изображения
+            <input
+                id="fileInput"
+                type="file"
+                accept="image/*"
+                multiple
+            >
+        </label>
 
-          <h3>Время обработки</h3>
-          <div>Декодирование: <strong id="decodeTime">—</strong></div>
-          <div>Кодирование JPEG: <strong id="jpegTime">—</strong></div>
-          <div>Кодирование WebP: <strong id="webpTime">—</strong></div>
+        <button
+            id="againButton"
+            class="again-button hidden"
+            type="button"
+        >
+            Запустить снова
+        </button>
 
-          <h3>Размер результатов</h3>
-          <div>JPEG: <strong id="convertedSize">—</strong></div>
-          <div>WebP: <strong id="webpSize">—</strong></div>
-        </div>
+        <section id="status" class="status hidden">
+            <div>
+                Выбрано файлов:
+                <strong id="fileCount">0</strong>
+            </div>
 
-        <div class="device-info">
-          <div>Память JavaScript: <strong id="memoryUsage">—</strong></div>
-          <div>Батарея: <strong id="batteryLevel">—</strong></div>
-        </div>
-      </section>
+            <div id="progress"></div>
+            <div id="fileResults"></div>
+
+            <div class="summary">
+                <h3>Общая статистика</h3>
+
+                <div>
+                    Успешно обработано:
+                    <strong id="successCount">0</strong>
+                </div>
+
+                <div>
+                    Исходный размер:
+                    <strong id="originalSize">—</strong>
+                </div>
+
+                <div>
+                    Суммарный размер JPEG:
+                    <strong id="convertedSize">—</strong>
+                </div>
+
+                <div>
+                    Суммарный размер WebP:
+                    <strong id="webpSize">—</strong>
+                </div>
+
+                <div>
+                    Экономия места с JPEG:
+                    <strong id="sizeReduction">—</strong>
+                </div>
+
+                <div>
+                    Экономия места с WebP:
+                    <strong id="webpReduction">—</strong>
+                </div>
+            </div>
+        </section>
     </main>
+
     <script src="app.js"></script>
-  </body>
+</body>
 </html>
