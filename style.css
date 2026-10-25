@@ -1,0 +1,134 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Arial, sans-serif;
+  background: #f5f5f5;
+}
+
+.container {
+  width: min(600px, 100%);
+  margin: 0 auto;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+h1 {
+  margin: 0 0 16px;
+  font-size: 28px;
+}
+
+.description {
+  margin: 0 0 30px;
+  color: #666;
+  line-height: 1.5;
+}
+
+.file-button {
+  display: inline-block;
+  padding: 14px 24px;
+  border-radius: 8px;
+  background: #222;
+  color: white;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.file-button input {
+  display: none;
+}
+
+.status {
+  margin-top: 30px;
+  padding: 20px;
+  background: white;
+  border-radius: 12px;
+}
+
+#progress {
+  margin-top: 20px;
+  min-height: 24px;
+}
+
+.result {
+  margin-top: 20px;
+  display: grid;
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 30px 16px;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  .file-button {
+    width: 100%;
+  }
+}
+
+#fileResults {
+  margin-top: 20px;
+  text-align: left;
+}
+
+.file-result {
+  padding: 10px 0;
+  border-top: 1px solid #eee;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.summary {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+  display: grid;
+  gap: 10px;
+  text-align: left;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.again-button {
+  display: block;
+  width: 100%;
+  max-width: 300px;
+  margin: 12px auto 0;
+  padding: 14px 24px;
+  border: 1px solid #222;
+  border-radius: 8px;
+  background: white;
+  color: #222;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+
+.again-button:hover {
+  background: #222;
+  color: white;
+}
+
+.again-button:active {
+  transform: scale(0.98);
+}
+
+.again-button:focus-visible {
+  outline: 2px solid #555;
+  outline-offset: 3px;
+}
+
+.hidden {
+  display: none;
+}

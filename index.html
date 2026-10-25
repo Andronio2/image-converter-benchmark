@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image Converter Benchmark</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Image Converter Benchmark</h1>
+      <p class="description">Выберите изображения для последовательного преобразования в JPEG 1920×1080.</p>
+      <label class="file-button">
+        Выбрать изображения <input id="fileInput" type="file" accept="image/*" multiple />
+      </label>
+      <button id="againButton" class="again-button hidden" type="button">Обработать снова</button>
+      <section id="status" class="status hidden">
+        <div>Выбрано файлов: <strong id="fileCount">0</strong></div>
+        <div id="progress"></div>
+        <div id="fileResults"></div>
+        <div class="result">
+          <div>Время обработки: <strong id="elapsedTime">—</strong></div>
+          <div>Среднее время: <strong id="averageTime">—</strong></div>
+        </div>
+
+        <div class="summary">
+          <div>Успешно обработано: <strong id="successCount">0</strong></div>
+          <div>Исходный размер: <strong id="originalSize">—</strong></div>
+          <div>Размер JPEG: <strong id="convertedSize">—</strong></div>
+          <div>Уменьшение размера: <strong id="sizeReduction">—</strong></div>
+        </div>
+
+        <div class="device-info">
+          <div>Память JavaScript: <strong id="memoryUsage">—</strong></div>
+          <div>Батарея: <strong id="batteryLevel">—</strong></div>
+        </div>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
